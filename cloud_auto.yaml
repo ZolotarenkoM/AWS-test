@@ -1,12 +1,11 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
-Description: My AWS CloudFormation. This example creates an auto scaling group behind
-  a load balancer
+Description: 'My AWS CloudFormation. This example creates an auto scaling group behind a load balancer'
 Parameters:
   KeyName:
-    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
-    Default: key_n.virginia_mzolo
-    Type: String
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
   InstanceType:
     Description: MyWebServer EC2 instance type
     Type: String
@@ -34,7 +33,6 @@ Mappings:
       HVM64: ami-0ff8a91507f77f867
 
 Resources:
-
 # AutoScaling config
   AutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -53,7 +51,7 @@ Resources:
       ImageId: !FindInMap [AWSRegionArch2AMI, !Ref 'AWS::Region', !FindInMap [AWSInstanceType2Arch,
           !Ref 'InstanceType', Arch]]
       InstanceType: !Ref 'InstanceType'
-      SecurityGroups: [!Ref 'ECSecurityGroup']
+      SecurityGroups: [!Ref 'MySecurityGroup']
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
@@ -63,7 +61,7 @@ Resources:
           sudo service httpd start
           chkconfig httpd on
 
-# Load balancer
+# Config for Load balancer
   MyLoadBalancer:
     Type: AWS::ElasticLoadBalancing::LoadBalancer
     Properties:
@@ -83,8 +81,8 @@ Resources:
       - Key: Name
         Value: 'MyLoadBalancer'
 
-# Security Group for EC2
-  ECSecurityGroup:
+# Config for SecurityGroup
+  MySecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription:  Enable SSH access and HTTP access via port 80 and 22
