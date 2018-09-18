@@ -37,12 +37,6 @@ Mappings:
   AWSRegionArch2AMI:
     us-east-1:
       HVM64: ami-0ff8a91507f77f867
-  Region2ARNPrefix:
-    us-east-1:
-      ARNPrefix: 'arn:aws:'
-  Region2ELBAccountId:
-    us-east-1:
-      AccountId: '127311923021'
 
 Resources:
 # AutoScaling config
@@ -111,11 +105,9 @@ Resources:
         Statement:
         - Sid: ELBAccessLogs20130930
           Effect: Allow
-          Resource: !Join ['', [!FindInMap [Region2ARNPrefix, !Ref 'AWS::Region',
-                ARNPrefix], 's3:::', !Ref 'S3LoggingBucket', /AWSLogs/, !Ref 'AWS::AccountId',
-              /*]]
+          Resource: !Sub arn:aws:s3:::${S3LoggingBucket}/AWSLogs/${AWS::AccountId}/*
           Principal:
-            AWS: !FindInMap [Region2ELBAccountId, !Ref 'AWS::Region', AccountId]
+            AWS: 127311923021
           Action: ['s3:PutObject']
 
 # Config for SecurityGroup
@@ -141,4 +133,4 @@ Outputs:
     Value: !Join ['', ['http://', !GetAtt [MyLoadBalancer, DNSName]]]
   ELBAccessLogsBucket:
     Description: DNS name of the S3 bucket storing ELB Access Logs
-    Value: !GetAtt [S3LoggingBucket, DomainName]
+    Value: !GetAtt S3LoggingBucket.DomainName
