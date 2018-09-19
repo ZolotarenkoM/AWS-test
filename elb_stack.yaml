@@ -1,0 +1,64 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'My AWS CloudFormation. This example creates a load balancer.
+              The ELB puts access logs into an S3 bucket'
+
+Parameters:
+  EnableELBLogs:
+    Description: Enable/Disable access logs for ELB
+    AllowedValues: [true, false]
+    Type: String
+    Default: 'false'
+
+Resources:
+# Config for Load balancer
+  MyLoadBalancer:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      AvailabilityZones: !GetAZs ''
+      CrossZone: 'true'
+      Listeners:
+      - LoadBalancerPort: '80'
+        InstancePort: '80'
+        Protocol: HTTP
+      HealthCheck:
+        Target: HTTP:80/
+        HealthyThreshold: '2'
+        UnhealthyThreshold: '2'
+        Interval: '5'
+        Timeout: '2'
+      AccessLoggingPolicy:
+        S3BucketName: !Ref S3LoggingBucket
+        Enabled: !Ref EnableELBLogs
+        EmitInterval: '5'
+      Tags:
+      - Key: Name
+        Value: 'MyLoadBalancer'
+    DependsOn: LogsBucketPolicy
+
+# Config S3 backet for ELB access logs 
+  S3LoggingBucket:
+    Type: AWS::S3::Bucket
+  LogsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3LoggingBucket
+      PolicyDocument:
+        Version: '2008-10-17'
+        Statement:
+        - Sid: ELBAccessLogs20130930
+          Effect: Allow
+          Resource: !Sub arn:aws:s3:::${S3LoggingBucket}/AWSLogs/${AWS::AccountId}/*
+          Principal:
+            AWS: 127311923021
+          Action: ['s3:PutObject']
+
+Outputs:
+  MyELB:
+    Description: Load balancer
+    Value: !Ref MyLoadBalancer
+    Export:
+      Name: !Sub "${AWS::StackName}-MyELB"
+  WebsiteURL:
+    Description: URL for website
+    Value: !Join ['', ['http://', !GetAtt [MyLoadBalancer, DNSName]]]
+
