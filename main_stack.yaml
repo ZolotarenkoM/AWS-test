@@ -39,7 +39,7 @@ Mappings:
       Arch: NATHVM64
   AWSRegionArch2AMI:
     us-east-1:
-      HVM64: ami-0ff8a91507f77f867
+      HVM64: ami-04681a1dbd79675a5
 
 Resources:
 # AutoScaling config
@@ -53,7 +53,6 @@ Resources:
       LoadBalancerNames:
         - Fn::ImportValue: !Sub "${NetworkStackName}-MyELB"
           
-
 # LaunchConfig config
   LaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
@@ -69,7 +68,10 @@ Resources:
           yum -y update
           yum -y install httpd
           PrivateIP=`curl http://169.254.169.254/latest/meta-data/local-ipv4`
-          echo "Web Server with $PrivateIP " > /var/www/html/index.html
+          instance=`curl http://169.254.169.254/latest/meta-data/instance-id`
+          region=`curl -s http://169.254.169.254/latest/dynamic/instance-identity/document | awk -F\" '/region/ {print $4}'`
+          hostnamectl set-hostname qa-web-$instance.$region.amazonaws.com
+          echo -e "Web Server with $PrivateIP \nName - \"$(hostname)\" " > /var/www/html/index.html
           sudo service httpd start
           chkconfig httpd on
 
