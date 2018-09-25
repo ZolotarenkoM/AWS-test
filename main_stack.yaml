@@ -48,7 +48,7 @@ Resources:
     Properties:
       AvailabilityZones: !GetAZs ''
       LaunchConfigurationName: !Ref 'LaunchConfig'
-      MinSize: '0'
+      MinSize: '1'
       MaxSize: '2'
       LoadBalancerNames:
         - Fn::ImportValue: !Sub "${NetworkStackName}-MyELB"
@@ -56,24 +56,92 @@ Resources:
 # LaunchConfig config
   LaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
+    Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCreds:
+          type: "S3"
+          role: !Ref 'RoleS3ReadAccess'
+          buckets: 
+            - "mzol-backet"
+      AWS::CloudFormation::Init:
+        install_app:
+          packages:
+            yum:
+              httpd: []
+              tomcat: []
+              java-1.8.0-openjdk: []
+          files:
+            /usr/share/tomcat/webapps/app-1.0.0.war:
+              source: "http://mzol-backet.s3.amazonaws.com/app-1.0.0.war"
+              mode: 000644
+              owner: tomcat
+              group: tomcat
+              authentication: S3AccessCreds
+            /etc/httpd/conf.d/tomcatvh.conf:
+              content: |
+                <VirtualHost *:80>
+                  ProxyPass / http://localhost:8080/app-1.0.0/app
+                  ProxyPassReverse / http://localhost:8080/
+                </VirtualHost>
+              mode: 000644
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              httpd:
+                enabled: "true"
+                ensureRunning: "true"
+              tomcat:
+                enabled: "true"
+                ensureRunning: "true"
+        configSets:
+          default: [ install_app ]
     Properties:
       KeyName: !Ref 'KeyName'
       ImageId: !FindInMap [AWSRegionArch2AMI, !Ref 'AWS::Region', !FindInMap [AWSInstanceType2Arch,
           !Ref 'InstanceType', Arch]]
       InstanceType: !Ref 'InstanceType'
       SecurityGroups: [!Ref 'MySecurityGroup']
+      IamInstanceProfile: !Ref 'WebServerInstanceProfile'
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
           yum -y update
-          yum -y install httpd
-          PrivateIP=`curl http://169.254.169.254/latest/meta-data/local-ipv4`
+          yum install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource LaunchConfig --region ${AWS::Region}
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource LaunchConfig --region ${AWS::Region}
           instance=`curl http://169.254.169.254/latest/meta-data/instance-id`
           region=`curl -s http://169.254.169.254/latest/dynamic/instance-identity/document | awk -F\" '/region/ {print $4}'`
-          hostnamectl set-hostname qa-web-$instance.$region.amazonaws.com
-          echo -e "Web Server with $PrivateIP \nName - \"$(hostname)\" " > /var/www/html/index.html
-          sudo service httpd start
-          chkconfig httpd on
+          sudo hostnamectl set-hostname qa-web-$instance.$region.amazonaws.com
+
+# config InstanceProfile
+  WebServerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles: [!Ref 'RoleS3ReadAccess']
+
+# Config Role for s3
+  RoleS3ReadAccess:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - 'ec2.amazonaws.com'
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+      - PolicyName: !Sub ${AWS::StackName}-S3Download-${AWS::Region}
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: 's3:GetObject'
+            Resource: '*'
 
 # Config for SecurityGroup
   MySecurityGroup:
@@ -81,14 +149,8 @@ Resources:
     Properties:
       GroupDescription:  Enable SSH access and HTTP access via port 80 and 22
       SecurityGroupIngress:
-      - IpProtocol: tcp
-        FromPort: '80'
-        ToPort: '80'
-        CidrIp: 0.0.0.0/0
-      - IpProtocol: tcp
-        FromPort: '22'
-        ToPort: '22'
-        CidrIp: !Ref 'SSHLocation'
+        - { IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: 0.0.0.0/0 }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: !Ref 'SSHLocation' }
       Tags:
       - Key: Name
         Value: 'http-ssh'
