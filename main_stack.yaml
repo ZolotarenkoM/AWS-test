@@ -106,13 +106,9 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          yum -y update
-          yum install -y aws-cfn-bootstrap
+          aws s3 cp s3://mzol-backet/install.sh - | bash -l -s --
           /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource LaunchConfig --region ${AWS::Region}
           /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource LaunchConfig --region ${AWS::Region}
-          instance=`curl http://169.254.169.254/latest/meta-data/instance-id`
-          region=`curl -s http://169.254.169.254/latest/dynamic/instance-identity/document | awk -F\" '/region/ {print $4}'`
-          sudo hostnamectl set-hostname qa-web-$instance.$region.amazonaws.com
 
 # config InstanceProfile
   WebServerInstanceProfile:
