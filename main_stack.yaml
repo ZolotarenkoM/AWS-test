@@ -1,7 +1,8 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'My AWS CloudFormation. This example creates an auto scaling group behind a load balancer (reference from a different stack)
-              The ELB puts access logs into an S3 bucket.'
+              and is Auto-Scaled based on the CPU utilization of the web servers
+              The ELB puts access logs into an S3 bucket and Auto Scaled sample web site running on an Apache Web Server.'
 Parameters:
   NetworkStackName:
     Description: Name of an active CloudFormation stack that contains the ELB
@@ -43,7 +44,7 @@ Mappings:
 
 Resources:
 # AutoScaling config
-  AutoScalingGroup:
+  WebAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       AvailabilityZones: !GetAZs ''
@@ -52,7 +53,56 @@ Resources:
       MaxSize: '2'
       LoadBalancerNames:
         - Fn::ImportValue: !Sub "${NetworkStackName}-MyELB"
-          
+
+# config Scaling UP Policy
+  WebScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref 'WebAutoScalingGroup'
+      Cooldown: '60'
+      ScalingAdjustment: 1
+# config Scaling Down Policy
+  WebScaleDownPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref 'WebAutoScalingGroup'
+      Cooldown: '60'
+      ScalingAdjustment: -1
+# config CloudWatch Alarms for average CPU usage for scale up
+  CPUUtilizationHighAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: 'Scale-up if CPU > 80% for 2 minute'
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 80
+      AlarmActions: [!Ref 'WebScaleUpPolicy']
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value: !Ref 'WebAutoScalingGroup'
+      ComparisonOperator: GreaterThanThreshold
+# config CloudWatch Alarms for average CPU usage for scale down
+  CPUUtilizationLowAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: 'Scale-down if CPU < 60% for 2 minute'
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 60
+      AlarmActions: [!Ref 'WebScaleDownPolicy']
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value: !Ref 'WebAutoScalingGroup'
+      ComparisonOperator: LessThanThreshold
+
 # LaunchConfig config
   LaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
